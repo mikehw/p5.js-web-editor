@@ -20,7 +20,7 @@ module.exports = {
       './client/index.jsx',
     ],
     previewScripts: [
-       path.resolve(__dirname, '../client/utils/previewEntry.js')
+      path.resolve(__dirname, '../client/utils/previewEntry.js')
     ]
   },
   output: {
@@ -43,11 +43,14 @@ module.exports = {
       }
     }),
     new CopyWebpackPlugin({
-        patterns: [
-          {from: path.resolve(__dirname, '../translations/locales') , to: path.resolve(__dirname, 'locales')}
-        ]
-      }
-    )
+      patterns: [
+        { from: path.resolve(__dirname, '../translations/locales'), to: path.resolve(__dirname, 'locales') }
+      ]
+    }
+    ),
+    new webpack.ProvidePlugin({
+      tern: 'tern',
+    }),
   ],
   module: {
     rules: [
@@ -87,7 +90,7 @@ module.exports = {
             name: '[name].[ext]',
             outputPath: 'images/'
           }
-         }
+        }
       },
       {
         test: /fonts\/.*\.(eot|ttf|woff|woff2)$/,
@@ -126,7 +129,12 @@ module.exports = {
             plugins: [{ plugin: 'sass-extract-js', options: { camelCase: false } }]
           }
         }
-      }
+      },
+      {
+        test: /\.mjs$/,
+        include: /node_modules/,
+        type: "javascript/auto",
+      },
     ],
   },
 };

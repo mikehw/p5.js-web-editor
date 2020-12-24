@@ -15,6 +15,8 @@ import 'codemirror/addon/fold/foldcode';
 import 'codemirror/addon/fold/foldgutter';
 import 'codemirror/addon/fold/indent-fold';
 import 'codemirror/addon/comment/comment';
+import 'codemirror/addon/tern/worker';
+import 'codemirror/addon/tern/tern';
 import 'codemirror/keymap/sublime';
 import 'codemirror/addon/search/searchcursor';
 import 'codemirror/addon/search/matchesonscrollbar';
@@ -23,6 +25,8 @@ import 'codemirror/addon/search/jump-to-line';
 import 'codemirror/addon/edit/matchbrackets';
 import 'codemirror/addon/edit/closebrackets';
 import 'codemirror/addon/selection/mark-selection';
+import 'codemirror/addon/hint/show-hint';
+
 
 import { JSHINT } from 'jshint';
 import { CSSLint } from 'csslint';
@@ -93,6 +97,8 @@ class Editor extends React.Component {
   componentDidMount() {
     this.beep = new Audio(beepUrl);
     this.widgets = [];
+    this.server = undefined;
+
     this._cm = CodeMirror(this.codemirrorContainer, { // eslint-disable-line
       theme: `p5-${this.props.theme}`,
       lineNumbers: this.props.lineNumbers,
@@ -124,7 +130,6 @@ class Editor extends React.Component {
 
     delete this._cm.options.lint.options.errors;
 
-    const replaceCommand = metaKey === 'Ctrl' ? `${metaKey}-H` : `${metaKey}-Option-F`;
     this._cm.setOption('extraKeys', {
       Tab: (cm) => {
         // might need to specify and indent more?
@@ -156,7 +161,9 @@ class Editor extends React.Component {
     }, 1000));
 
     this._cm.on('keyup', () => {
-      const temp = this.props.t('Editor.KeyUpLineNumber', { lineNumber: parseInt((this._cm.getCursor().line) + 1, 10) });
+      const temp = this.props.t('Editor.KeyUpLineNumber', {
+        lineNumber: parseInt((this._cm.getCursor().line) + 1, 10)
+      });
       document.getElementById('current-line').innerHTML = temp;
     });
 
@@ -177,6 +184,23 @@ class Editor extends React.Component {
       showReplace: this.showReplace,
       getContent: this.getContent
     });
+
+    this.getURL('https://unpkg.com/tern/defs/browser.json', (err1, code) => {
+      this.getURL('https://unpkg.com/tern/defs/ecmascript.json', (err2, code2) => {
+        if (err1 || err2) throw new Error(`Request for browser.json: ${err1 || err2}`);
+        this.server = new CodeMirror.TernServer({ defs: [JSON.parse(code), JSON.parse(code2)] });
+        this._cm.setOption('extraKeys', {
+          'Ctrl-Space': (cm) => { this.server.complete(cm); },
+          'Ctrl-I': (cm) => { this.server.showType(cm); },
+          'Ctrl-O': (cm) => { this.server.showDocs(cm); },
+          'Alt-.': (cm) => { this.server.jumpToDef(cm); },
+          'Alt-,': (cm) => { this.server.jumpBack(cm); },
+          'Ctrl-Q': (cm) => { this.server.rename(cm); },
+          'Ctrl-.': (cm) => { this.server.selectName(cm); }
+        });
+        this._cm.on('cursorActivity', (cm) => { this.server.updateArgHints(cm); });
+      });
+    });
   }
 
   componentWillUpdate(nextProps) {
@@ -192,7 +216,7 @@ class Editor extends React.Component {
 
   componentDidUpdate(prevProps) {
     if (this.props.file.content !== prevProps.file.content &&
-        this.props.file.content !== this._cm.getValue()) {
+      this.props.file.content !== this._cm.getValue()) {
       const oldDoc = this._cm.swapDoc(this._docs[this.props.file.id]);
       this._docs[prevProps.file.id] = oldDoc;
       this._cm.focus();
@@ -271,6 +295,21 @@ class Editor extends React.Component {
     const content = this._cm.getValue();
     const updatedFile = Object.assign({}, this.props.file, { content });
     return updatedFile;
+  }
+
+  getURL(url, c) {
+    const xhr = new XMLHttpRequest();
+    xhr.open('get', url, true);
+    xhr.send();
+    // eslint-disable-next-line consistent-return
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === 4) {
+        if (xhr.status < 400) return c(null, xhr.responseText);
+        const e = new Error(xhr.responseText || 'No response');
+        e.status = xhr.status;
+        return c(e);
+      }
+    };
   }
 
   findPrev() {
